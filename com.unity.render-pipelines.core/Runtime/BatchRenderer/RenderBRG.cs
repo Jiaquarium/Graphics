@@ -142,13 +142,6 @@ namespace UnityEngine.Rendering
         public int probeOffsetOcclusion;
     }
 
-    struct DeferredMaterialInstance
-    {
-        public int instanceIndex;
-        public int meshHashCode;
-        public GeometryPoolHandle geoPoolHandle;
-    }
-
     unsafe class SceneBRG
     {
         private BatchRendererGroup m_BatchRendererGroup;
@@ -168,12 +161,12 @@ namespace UnityEngine.Rendering
         private NativeArray<int> m_drawIndices;
         private NativeArray<DrawRenderer> m_renderers;
         private BRGInstanceBufferOffsets m_instanceBufferOffsets;
-        private NativeList<DeferredMaterialInstance> m_deferredMaterialInstances;
 
         private LightMaps m_Lightmaps;
 
         private BRGTransformUpdater m_BRGTransformUpdater = new BRGTransformUpdater();
-        private GeometryPool m_GlobalGeoPool = null;
+        private DeferredMaterialBRG m_DeferredMaterialBRG = null;
+        GeometryPoolBatchHandle m_DeferredMaterialBatch = GeometryPoolBatchHandle.Invalid;
 
         private List<MeshRenderer> m_AddedRenderers;
 
@@ -810,31 +803,38 @@ namespace UnityEngine.Rendering
 
             //Special case, if the renderer qualifies for deferred materials, go for it!
             //TODO: for now we just handle 1 case, if the entire renderer can be deferred material.
-            if (overrideMaterial != null && overrideCounts == outMaterials.Count && m_GlobalGeoPool != null)
+            if (overrideMaterial != null && overrideCounts == outMaterials.Count && m_DeferredMaterialBatch.valid)
             {
-                m_GlobalGeoPool.Register(outMesh, out GeometryPoolHandle geoPoolHandle);
-                if (!geoPoolHandle.valid)
-                    return;
-
-                if (!m_deferredMaterialInstances.IsCreated)
-                    m_deferredMaterialInstances = new NativeList<DeferredMaterialInstance>(1024, Allocator.Persistent);
-
-                m_deferredMaterialInstances.Add(new DeferredMaterialInstance()
+                GeometryPoolEntryDesc geoPoolEntryDesc = new GeometryPoolEntryDesc()
                 {
-                    instanceIndex = instanceIndex,
-                    meshHashCode = outMesh.GetHashCode(),
-                    geoPoolHandle = geoPoolHandle
-                });
+                    mesh = outMesh,
+                    submeshData = outSubmeshIndices.Count != 0u ? new GeometryPoolSubmeshData[outSubmeshIndices.Count] : null
+                };
 
-                deferredMaterialBuffer[deferredMaterialBufferOffset + instanceIndex] = new Vector4((float)geoPoolHandle.index, 0.0f, 0.0f, 0.0f);
+                for (int i = 0; i < outSubmeshIndices.Count; ++i)
+                {
+                    geoPoolEntryDesc.submeshData[i] = new GeometryPoolSubmeshData()
+                    {
+                        submeshIndex = outSubmeshIndices[i],
+                        material = outMaterials[i]
+                    };
+                }
+
+                GeometryPoolHandle geoHandle = GeometryPoolHandle.Invalid;
+                if (!m_DeferredMaterialBRG.RegisterInstance(m_DeferredMaterialBatch, instanceIndex, geoPoolEntryDesc, out geoHandle))
+                {
+                    Debug.LogError("Could not register instance into deferred material batch: ." + renderer);
+                    return;
+                }
+
+                deferredMaterialBuffer[deferredMaterialBufferOffset + instanceIndex] = new Vector4((float)geoHandle.index, m_DeferredMaterialBatch.index, 0.0f, 0.0f);
 
                 //We succeeded! lets override the mesh / submesh index and material.
                 outSubmeshIndices.Clear();
                 outMaterials.Clear();
                 outMaterials.Add(overrideMaterial);
-                outSubmeshIndices.Add(geoPoolHandle.index);
-                outMesh = m_GlobalGeoPool.globalMesh;
-
+                outSubmeshIndices.Add(geoHandle.index);
+                outMesh = m_DeferredMaterialBRG.globalGeoMesh;
             }
         }
 
@@ -860,7 +860,7 @@ namespace UnityEngine.Rendering
         }
 
         // Start is called before the first frame update
-        public void Initialize(List<MeshRenderer> renderers, GeometryPool geometryPool)
+        public void Initialize(List<MeshRenderer> renderers, DeferredMaterialBRG deferredMaterialBRG)
         {
             m_BatchRendererGroup = new BatchRendererGroup(this.OnPerformCulling, IntPtr.Zero);
             m_BRGTransformUpdater.Initialize();
@@ -876,7 +876,7 @@ namespace UnityEngine.Rendering
             m_drawBatches = new NativeList<DrawBatch>(Allocator.Persistent);
             m_drawRanges = new NativeList<DrawRange>(Allocator.Persistent);
             m_AddedRenderers = new List<MeshRenderer>(renderers.Count);
-            m_GlobalGeoPool = geometryPool;
+            m_DeferredMaterialBRG = deferredMaterialBRG;
 
             // Fill the GPU-persistent scene data ComputeBuffer
             int bigDataBufferVector4Count =
@@ -941,6 +941,11 @@ namespace UnityEngine.Rendering
             LightProbesQuery lpq = new LightProbesQuery(Allocator.Temp);
             bool useFirstMeshForAll = false;    // Hack to help benchmarking different bottlenecks. TODO: Remove!
             MeshFilter firstMesh = null;
+            if (m_DeferredMaterialBRG != null)
+            {
+                if (!m_DeferredMaterialBRG.CreateBatch(renderers.Count, out m_DeferredMaterialBatch))
+                    Debug.LogError("Could not allocate batch for this scene, not enough gpu memory allocated.");
+            }
 
             RenderBRGGetMaterialRenderInfoCallback onGetMaterialInfoCb = RenderBRG.GetActiveMaterialRenderInfoCallback(out RenderPipelineAsset activePipeline);
 
@@ -1095,9 +1100,6 @@ namespace UnityEngine.Rendering
                 }
             }
 
-            if (m_GlobalGeoPool != null)
-                m_GlobalGeoPool.SendGpuCommands();
-
             m_GPUPersistentInstanceData =
                 new GraphicsBuffer(GraphicsBuffer.Target.Raw, (int)bigDataBufferVector4Count * 16 / 4, 4);
             m_GPUPersistentInstanceData.SetData(vectorBuffer);
@@ -1208,6 +1210,9 @@ namespace UnityEngine.Rendering
             // Register batch
             m_batchID = m_BatchRendererGroup.AddBatch(batchMetadata, m_GPUPersistentInstanceData.bufferHandle);
 
+            if (m_DeferredMaterialBatch.valid)
+                m_DeferredMaterialBRG.SubmitBatch(m_DeferredMaterialBatch, batchMetadata, m_GPUPersistentInstanceData.bufferHandle);
+
             m_initialized = true;
         }
 
@@ -1249,14 +1254,10 @@ namespace UnityEngine.Rendering
                         added.forceRenderingOff = false;
                 }
 
-                if (m_deferredMaterialInstances.IsCreated)
+                if (m_DeferredMaterialBatch.valid)
                 {
-                    foreach (var deferredInstance in m_deferredMaterialInstances)
-                    {
-                        m_GlobalGeoPool.UnregisterByMeshHashCode(deferredInstance.meshHashCode);
-                    }
-                    m_GlobalGeoPool.SendGpuCommands();
-                    m_deferredMaterialInstances.Dispose();
+                    m_DeferredMaterialBRG.DestroyBatch(m_DeferredMaterialBatch);
+                    m_DeferredMaterialBatch = GeometryPoolBatchHandle.Invalid;
                 }
             }
         }
@@ -1277,6 +1278,21 @@ namespace UnityEngine.Rendering
     }
 
     public delegate RenderBRGMaterialRenderInfo RenderBRGGetMaterialRenderInfoCallback(RenderBRGGetMaterialRenderInfoArgs arguments);
+
+    public struct RenderBRGBindingData
+    {
+        public GeometryPool globalGeometryPool;
+
+        public bool valid => globalGeometryPool != null;
+
+        public static RenderBRGBindingData NewDefault()
+        {
+            return new RenderBRGBindingData()
+            {
+                globalGeometryPool = null
+            };
+        }
+    }
 
     public class RenderBRG : MonoBehaviour
     {
@@ -1307,26 +1323,20 @@ namespace UnityEngine.Rendering
         public bool EnableTransformUpdate = true;
         private GeometryPool m_GlobalGeoPool;
 
-        public static GeometryPool FindGlobalGeometryPool()
+        private static uint s_DeferredMaterialBRGRef = 0;
+        private static DeferredMaterialBRG s_DeferredMaterialBRG;
+
+        public static RenderBRGBindingData GetRenderBRGMaterialBindingData()
         {
-            RenderBRG[] brgers = Resources.FindObjectsOfTypeAll<RenderBRG>();
-            if (brgers == null)
-                return null;
-
-            foreach (var brg in brgers)
+            return new RenderBRGBindingData()
             {
-                if (brg.m_GlobalGeoPool != null)
-                    return brg.m_GlobalGeoPool;
-            }
-
-            return null;
+                globalGeometryPool = s_DeferredMaterialBRG == null ? null : s_DeferredMaterialBRG.geometryPool
+            };
         }
 
         private void OnEnable()
         {
-            var globalGeoPool = FindGlobalGeometryPool();
-            if (EnableDeferredMaterials && globalGeoPool == null && m_GlobalGeoPool == null)
-                m_GlobalGeoPool = new GeometryPool(GeometryPoolDesc.NewDefault());
+            CreateDeferredMaterialBRG();
 
             m_gpuCmdBuffer = new CommandBuffer();
             SceneManager.sceneLoaded += OnSceneLoaded;
@@ -1370,6 +1380,31 @@ namespace UnityEngine.Rendering
 
             foreach (var scene in toNull)
                 m_Scenes[scene] = null;
+
+            DisposeDeferredMaterialBRG();
+        }
+
+        private void CreateDeferredMaterialBRG()
+        {
+            if (!EnableDeferredMaterials)
+                return;
+            if (s_DeferredMaterialBRGRef == 0)
+                s_DeferredMaterialBRG = new DeferredMaterialBRG();
+            ++s_DeferredMaterialBRGRef;
+        }
+
+        private void DisposeDeferredMaterialBRG()
+        {
+            if (s_DeferredMaterialBRG == null)
+                return;
+
+            --s_DeferredMaterialBRGRef;
+
+            if (s_DeferredMaterialBRGRef > 0)
+                return;
+
+            s_DeferredMaterialBRG.Dispose();
+            s_DeferredMaterialBRG = null;
         }
 
         private static void GetValidChildRenderers(GameObject root, List<MeshRenderer> toAppend)
@@ -1404,7 +1439,7 @@ namespace UnityEngine.Rendering
             Debug.Log("Loading scene: " + scene.name);
 #endif
             SceneBRG brg = new SceneBRG();
-            brg.Initialize(renderers, RenderBRG.FindGlobalGeometryPool());
+            brg.Initialize(renderers, s_DeferredMaterialBRG);
             m_Scenes[scene] = brg;
         }
 
@@ -1454,11 +1489,7 @@ namespace UnityEngine.Rendering
 
             m_Scenes.Clear();
 
-            if (m_GlobalGeoPool != null)
-            {
-                m_GlobalGeoPool.Dispose();
-                m_GlobalGeoPool = null;
-            }
+            DisposeDeferredMaterialBRG();
         }
     }
 }
