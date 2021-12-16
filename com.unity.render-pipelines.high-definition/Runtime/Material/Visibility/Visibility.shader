@@ -32,8 +32,7 @@ Shader "HDRP/Visibility"
     // variable declaration
     //-------------------------------------------------------------------------------------
 
-    // #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Lit/Lit.cs.hlsl"
-    //#include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Lit/LitProperties.hlsl"
+    #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Visibility/VisibilityProperties.hlsl"
 
     ENDHLSL
 
@@ -59,6 +58,10 @@ Shader "HDRP/Visibility"
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
+            #define SHADERPASS SHADERPASS_VISIBILITY
+
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Visibility/VisibilityCommon.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Visibility/VisibilityPass.hlsl"
             #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/ShaderPass/ShaderPassVisibility.hlsl"
 
             #pragma vertex Vert
@@ -66,7 +69,6 @@ Shader "HDRP/Visibility"
 
             ENDHLSL
         }
-
 
         Pass
         {
@@ -86,11 +88,14 @@ Shader "HDRP/Visibility"
             #pragma instancing_options renderinglayer
             #pragma multi_compile _ DOTS_INSTANCING_ON
 
-            //TODO: make this follow the pretty pattern of materials.
-            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/ShaderPass/ShaderPassVisibility.hlsl"
+            #define SHADERPASS SHADERPASS_SHADOWS
+
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Visibility/VisibilityCommon.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/Material/Visibility/VisibilityDepthPass.hlsl"
+            #include "Packages/com.unity.render-pipelines.high-definition/Runtime/RenderPipeline/ShaderPass/ShaderPassDepthOnly.hlsl"
 
             #pragma vertex Vert
-            #pragma fragment FragEmpty
+            #pragma fragment Frag
 
             ENDHLSL
         }

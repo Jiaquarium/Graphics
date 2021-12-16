@@ -1,6 +1,9 @@
 struct AttributesMesh
 {
+//by default, all AttributeMesh have position enabled
+#ifndef ATTRIBUTE_NEEDS_PROCEDURAL_POSITION
     float3 positionOS   : POSITION;
+#endif
 #ifdef ATTRIBUTES_NEED_NORMAL
     float3 normalOS     : NORMAL;
 #endif
@@ -21,6 +24,9 @@ struct AttributesMesh
 #endif
 #ifdef ATTRIBUTES_NEED_COLOR
     float4 color        : COLOR;
+#endif
+#ifdef ATTRIBUTES_NEED_VERTEX_ID
+    uint vertexIndex    : SV_VertexID;
 #endif
 
     UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -191,6 +197,10 @@ FragInputs UnpackVaryingsMeshToFragInputs(PackedVaryingsMeshToPS input)
 #endif
 #if defined(VARYINGS_NEED_COLOR) || defined(ATTRIBUTES_NEED_COLOR)
 #define VARYINGS_DS_NEED_COLOR
+#endif
+
+#if defined(VARYINGS_NEED_BATCH_ID)
+#error Deferred_Material_rendering_does_not_support_tesselation
 #endif
 
 // Varying for domain shader
