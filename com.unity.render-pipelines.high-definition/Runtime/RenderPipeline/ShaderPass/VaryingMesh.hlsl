@@ -199,10 +199,6 @@ FragInputs UnpackVaryingsMeshToFragInputs(PackedVaryingsMeshToPS input)
 #define VARYINGS_DS_NEED_COLOR
 #endif
 
-#if defined(VARYINGS_NEED_BATCH_ID)
-#error Deferred_Material_rendering_does_not_support_tesselation
-#endif
-
 // Varying for domain shader
 // Position and normal are always present (for tessellation) and in world space
 struct VaryingsMeshToDS
