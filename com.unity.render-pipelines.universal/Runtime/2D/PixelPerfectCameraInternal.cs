@@ -210,6 +210,12 @@ namespace UnityEngine.Experimental.Rendering.Universal
         }
 
         // Find a pixel-perfect orthographic size as close to targetOrthoSize as possible.
+        /// <summary>
+        /// https://github.com/Unity-Technologies/com.unity.cinemachine/blob/release-2.7.9/Runtime/Behaviours/CinemachinePixelPerfect.cs
+        /// orthoSize is the implied ortho size calculated from the width and height rect
+        /// calced by PPCam after cropping.
+        /// </summary>
+        /// <param name="targetOrthoSize">The ortho size of the active Virtual Camera.</param>
         internal float CorrectCinemachineOrthoSize(float targetOrthoSize)
         {
             float correctedOrthoSize;
@@ -222,12 +228,41 @@ namespace UnityEngine.Experimental.Rendering.Universal
             else
             {
                 cinemachineVCamZoom = Math.Max(1, Mathf.RoundToInt(zoom * orthoSize / targetOrthoSize));
+                
+                correctedOrthoSize = zoom * orthoSize / cinemachineVCamZoom;
+
+                // Manually adjust the Zoom (Scaling Factor) whenever ortho is too high
+                // (do not want the image to be too zoomed out).
+                switch (cinemachineVCamZoom)
+                {
+                    case 1:
+                        if (correctedOrthoSize > 9.0f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 2:
+                        if (correctedOrthoSize > 8.5f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 3:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 4:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                    default:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                }
+
                 correctedOrthoSize = zoom * orthoSize / cinemachineVCamZoom;
             }
 
             // In this case the actual zoom level is cinemachineVCamZoom instead of zoom.
-            if (!m_Component.upscaleRT && !m_Component.pixelSnapping)
-                unitsPerPixel = 1.0f / (cinemachineVCamZoom * m_Component.assetsPPU);
+            // if (!m_Component.upscaleRT && !m_Component.pixelSnapping)
+            //     unitsPerPixel = 1.0f / (cinemachineVCamZoom * m_Component.assetsPPU);
 
             return correctedOrthoSize;
         }

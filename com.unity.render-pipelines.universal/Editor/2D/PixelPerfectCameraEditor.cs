@@ -24,6 +24,14 @@ namespace UnityEditor.Experimental.Rendering.Universal
 
             public GUIStyle centeredLabel;
 
+            //------------------------------------------------------------------------------
+            // Custom
+            public GUIContent forceAspect = new GUIContent("Force Aspect Ratio", "Enable to force the specified Target Aspect Ratio");
+            public GUIContent targetAspectWidth = new GUIContent("Target Aspect Ratio Width", "The forced aspect ratio of the screen");
+            public GUIContent targetAspectHeight = new GUIContent("Target Aspect Ratio Height", "The forced aspect ratio of the screen");
+            public GUIContent pixelScreenSize = new GUIContent("Screen Size", "The size of the screen after cropping");
+            //------------------------------------------------------------------------------
+
             public Style()
             {
                 centeredLabel = new GUIStyle(EditorStyles.label);
@@ -44,6 +52,15 @@ namespace UnityEditor.Experimental.Rendering.Universal
         private SerializedProperty m_CropFrameY;
         private SerializedProperty m_CropFrameX;
         private SerializedProperty m_StretchFill;
+
+        //------------------------------------------------------------------------------
+        // Custom
+        private SerializedProperty m_ForceAspect;
+        private SerializedProperty m_TargetAspectWidth;
+        private SerializedProperty m_TargetAspectHeight;
+        private SerializedProperty m_PixelScreenSize;
+
+        //------------------------------------------------------------------------------
 
         private Vector2 m_GameViewSize = Vector2.zero;
         private GUIContent m_CurrentPixelRatioValue;
@@ -88,6 +105,11 @@ namespace UnityEditor.Experimental.Rendering.Universal
             m_CropFrameY = serializedObject.FindProperty("m_CropFrameY");
             m_CropFrameX = serializedObject.FindProperty("m_CropFrameX");
             m_StretchFill = serializedObject.FindProperty("m_StretchFill");
+
+            m_ForceAspect = serializedObject.FindProperty("m_ForceAspect");
+            m_TargetAspectWidth = serializedObject.FindProperty("m_TargetAspectWidth");
+            m_TargetAspectHeight = serializedObject.FindProperty("m_TargetAspectHeight");
+            m_PixelScreenSize = serializedObject.FindProperty("m_PixelScreenSize");
         }
 
         public override bool RequiresConstantRepaint()
@@ -168,6 +190,16 @@ namespace UnityEditor.Experimental.Rendering.Universal
                 EditorGUILayout.PropertyField(m_StretchFill, m_Style.stretchFill);
                 EditorGUI.indentLevel--;
             }
+
+            //------------------------------------------------------------------------------
+            // Custom
+            EditorGUILayout.LabelField("Custom", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(m_ForceAspect, m_Style.forceAspect);
+            EditorGUILayout.PropertyField(m_TargetAspectWidth, m_Style.targetAspectWidth);
+            EditorGUILayout.PropertyField(m_TargetAspectHeight, m_Style.targetAspectHeight);
+            
+            EditorGUILayout.PropertyField(m_PixelScreenSize, m_Style.pixelScreenSize);
+            //------------------------------------------------------------------------------
 
             serializedObject.ApplyModifiedProperties();
 

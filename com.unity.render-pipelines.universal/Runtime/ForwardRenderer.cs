@@ -1,3 +1,4 @@
+using UnityEngine.Experimental.Rendering.Universal;
 using UnityEngine.Rendering.Universal.Internal;
 using System.Reflection;
 
@@ -53,6 +54,7 @@ namespace UnityEngine.Rendering.Universal
         InvokeOnRenderObjectCallbackPass m_OnRenderObjectCallbackPass;
         FinalBlitPass m_FinalBlitPass;
         CapturePass m_CapturePass;
+        PixelPerfectBackgroundPass m_PixelPerfectBackgroundPass;
 #if ENABLE_VR && ENABLE_XR_MODULE
         XROcclusionMeshPass m_XROcclusionMeshPass;
         CopyDepthPass m_XRCopyDepthPass;
@@ -176,6 +178,8 @@ namespace UnityEngine.Rendering.Universal
             }
             m_OnRenderObjectCallbackPass = new InvokeOnRenderObjectCallbackPass(RenderPassEvent.BeforeRenderingPostProcessing);
 
+            m_PixelPerfectBackgroundPass = new PixelPerfectBackgroundPass(RenderPassEvent.AfterRenderingTransparents);
+
             m_PostProcessPasses = new PostProcessPasses(data.postProcessData, m_BlitMaterial);
 
             m_CapturePass = new CapturePass(RenderPassEvent.AfterRendering);
@@ -247,6 +251,34 @@ namespace UnityEngine.Rendering.Universal
             Camera camera = renderingData.cameraData.camera;
             ref CameraData cameraData = ref renderingData.cameraData;
             RenderTextureDescriptor cameraTargetDescriptor = renderingData.cameraData.cameraTargetDescriptor;
+
+            PixelPerfectCamera ppc = null;
+            // bool ppcUsesOffscreenRT = false;
+            // bool ppcUpscaleRT = false;
+
+            // To remove trash in borders when resizing when cropped with PPCam.
+            // https://github.com/Unity-Technologies/Graphics/blob/aa261ef3a361e54114fa2c517c6959a47c01f9cd/com.unity.render-pipelines.universal/Runtime/2D/Renderer2D.cs#L154
+            // Pixel Perfect Camera doesn't support camera stacking.
+            if (cameraData.renderType == CameraRenderType.Base)
+            {
+                cameraData.camera.TryGetComponent(out ppc);
+                
+                if (ppc != null)
+                {
+                    if (ppc.offscreenRTSize != Vector2Int.zero)
+                    {
+                        // ppcUsesOffscreenRT = true;
+
+                        // Pixel Perfect Camera may request a different RT size than camera VP size.
+                        // In that case we need to modify cameraTargetDescriptor here so that all the passes would use the same size.
+                        cameraTargetDescriptor.width = ppc.offscreenRTSize.x;
+                        cameraTargetDescriptor.height = ppc.offscreenRTSize.y;
+                    }
+
+                    // colorTextureFilterMode = ppc.finalBlitFilterMode;
+                    // ppcUpscaleRT = ppc.upscaleRT && ppc.isRunning;
+                }
+            }
 
             // Special path for depth only offscreen cameras. Only write opaques + transparents.
             bool isOffscreenDepthTexture = cameraData.targetTexture != null && cameraData.targetTexture.format == RenderTextureFormat.Depth;
@@ -482,6 +514,13 @@ namespace UnityEngine.Rendering.Universal
             // When post-processing is enabled we can use the stack to resolve rendering to camera target (screen or RT).
             // However when there are render passes executing after post we avoid resolving to screen so rendering continues (before sRGBConvertion etc)
             bool resolvePostProcessingToCameraTarget = !hasCaptureActions && !hasPassesAfterPostProcessing && !applyFinalPostProcessing;
+
+            // To remove trash in borders when resizing when cropped with PPCam.
+            // https://github.com/Unity-Technologies/Graphics/blob/aa261ef3a361e54114fa2c517c6959a47c01f9cd/com.unity.render-pipelines.universal/Runtime/2D/Renderer2D.cs#L225
+            if (ppc != null && ppc.isRunning && (ppc.cropFrameX || ppc.cropFrameY || ppc.forceAspect))
+            {
+                EnqueuePass(m_PixelPerfectBackgroundPass);
+            }
 
             if (lastCameraInTheStack)
             {
