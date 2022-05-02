@@ -224,11 +224,39 @@ namespace UnityEngine.Rendering.Universal
             {
                 cinemachineVCamZoom = Math.Max(1, Mathf.RoundToInt(zoom * orthoSize / targetOrthoSize));
                 correctedOrthoSize = zoom * orthoSize / cinemachineVCamZoom;
+
+                // Manually adjust the Zoom (Scaling Factor) whenever ortho is too high
+                // (do not want the image to be too zoomed out).
+                switch (cinemachineVCamZoom)
+                {
+                    case 1:
+                        if (correctedOrthoSize > 9.0f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 2:
+                        if (correctedOrthoSize > 8.5f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 3:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                    case 4:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                    default:
+                        if (correctedOrthoSize > 8f)
+                            cinemachineVCamZoom++;
+                        break;
+                }
+
+                correctedOrthoSize = zoom * orthoSize / cinemachineVCamZoom;
             }
 
             // In this case the actual zoom level is cinemachineVCamZoom instead of zoom.
-            if (!m_Component.upscaleRT && !m_Component.pixelSnapping)
-                unitsPerPixel = 1.0f / (cinemachineVCamZoom * m_Component.assetsPPU);
+            // if (!m_Component.upscaleRT && !m_Component.pixelSnapping)
+            //     unitsPerPixel = 1.0f / (cinemachineVCamZoom * m_Component.assetsPPU);
 
             return correctedOrthoSize;
         }

@@ -24,6 +24,14 @@ namespace UnityEditor.Rendering.Universal
 
             public GUIStyle centeredLabel;
 
+            //------------------------------------------------------------------------------
+            // Custom
+            public GUIContent forceAspect = new GUIContent("Force Aspect Ratio", "Enable to force the specified Target Aspect Ratio");
+            public GUIContent targetAspectWidth = new GUIContent("Target Aspect Ratio Width", "The forced aspect ratio of the screen");
+            public GUIContent targetAspectHeight = new GUIContent("Target Aspect Ratio Height", "The forced aspect ratio of the screen");
+            public GUIContent pixelScreenSize = new GUIContent("Screen Size", "The size of the screen after cropping");
+            //------------------------------------------------------------------------------
+
             public Style()
             {
                 centeredLabel = new GUIStyle(EditorStyles.label);
@@ -42,6 +50,15 @@ namespace UnityEditor.Rendering.Universal
         private SerializedProperty m_CropFrame;
         private SerializedProperty m_GridSnapping;
 
+        //------------------------------------------------------------------------------
+        // Custom
+        private SerializedProperty m_ForceAspect;
+        private SerializedProperty m_TargetAspectWidth;
+        private SerializedProperty m_TargetAspectHeight;
+        private SerializedProperty m_PixelScreenSize;
+
+        //------------------------------------------------------------------------------
+        
         private Vector2 m_GameViewSize = Vector2.zero;
         private GUIContent m_CurrentPixelRatioValue;
         bool m_CameraStacking;
@@ -98,6 +115,14 @@ namespace UnityEditor.Rendering.Universal
             m_RefResY = serializedObject.FindProperty("m_RefResolutionY");
             m_CropFrame = serializedObject.FindProperty("m_CropFrame");
             m_GridSnapping = serializedObject.FindProperty("m_GridSnapping");
+            
+            //------------------------------------------------------------------------------
+            // Custom
+            m_ForceAspect = serializedObject.FindProperty("m_ForceAspect");
+            m_TargetAspectWidth = serializedObject.FindProperty("m_TargetAspectWidth");
+            m_TargetAspectHeight = serializedObject.FindProperty("m_TargetAspectHeight");
+            m_PixelScreenSize = serializedObject.FindProperty("m_PixelScreenSize");
+            //------------------------------------------------------------------------------
         }
 
         public override bool RequiresConstantRepaint()
@@ -121,11 +146,12 @@ namespace UnityEditor.Rendering.Universal
         {
             LazyInit();
 
-            if (!UsingRenderer2D())
-            {
-                EditorGUILayout.HelpBox(Style.nonRenderer2DError, MessageType.Error);
-                return;
-            }
+            // Custom
+            // if (!UsingRenderer2D())
+            // {
+            //     EditorGUILayout.HelpBox(Style.nonRenderer2DError, MessageType.Error);
+            //     return;
+            // }
 
             float originalLabelWidth = EditorGUIUtility.labelWidth;
 
@@ -162,6 +188,15 @@ namespace UnityEditor.Rendering.Universal
             EditorGUILayout.PropertyField(m_CropFrame, m_Style.cropFrame);
             EditorGUILayout.PropertyField(m_GridSnapping, m_Style.gridSnapping);
 
+            //------------------------------------------------------------------------------
+            // Custom
+            EditorGUILayout.LabelField("Custom", EditorStyles.boldLabel);
+            EditorGUILayout.PropertyField(m_ForceAspect, m_Style.forceAspect);
+            EditorGUILayout.PropertyField(m_TargetAspectWidth, m_Style.targetAspectWidth);
+            EditorGUILayout.PropertyField(m_TargetAspectHeight, m_Style.targetAspectHeight);
+
+            EditorGUILayout.PropertyField(m_PixelScreenSize, m_Style.pixelScreenSize);
+            //------------------------------------------------------------------------------
 
             serializedObject.ApplyModifiedProperties();
 

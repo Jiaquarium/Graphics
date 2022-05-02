@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Scripting.APIUpdating;
+using UnityEngine.Experimental.Rendering.Universal;
+using System;
 
 namespace UnityEngine.Experimental.Rendering.Universal
 {
@@ -10,12 +12,21 @@ namespace UnityEngine.Experimental.Rendering.Universal
     /// </summary>
     [ExecuteInEditMode]
     [DisallowMultipleComponent]
-    [AddComponentMenu("Rendering/2D/Pixel Perfect Camera")]
+    [AddComponentMenu("Rendering/2D/Pixel Perfect Camera (Custom)")]
     [RequireComponent(typeof(Camera))]
     [MovedFrom("UnityEngine.Experimental.Rendering")]
     [HelpURL("https://docs.unity3d.com/Packages/com.unity.render-pipelines.universal@latest/index.html?subfolder=/manual/2d-pixelperfect.html%23properties")]
     public class PixelPerfectCamera : MonoBehaviour, IPixelPerfectCamera, ISerializationCallbackReceiver
     {
+        //------------------------------------------------------------------------------
+        // Custom
+        public bool forceAspect { get { return m_ForceAspect; } set { m_ForceAspect = value; } }
+        public double targetAspectWidth { get { return m_TargetAspectWidth; } set { m_TargetAspectWidth = value; } }
+        public double targetAspectHeight { get { return m_TargetAspectHeight; } set { m_TargetAspectHeight = value; } }
+
+        public Vector2Int pixelScreenSize { get { return m_PixelScreenSize; } set { m_PixelScreenSize = value; } }
+        //------------------------------------------------------------------------------
+        
         public enum CropFrame
         {
             None,
@@ -197,6 +208,20 @@ namespace UnityEngine.Experimental.Rendering.Universal
             }
         }
 
+        //------------------------------------------------------------------------------
+        // Custom
+
+        public int CinemachineVCamZoom
+        {
+            get => m_Internal.cinemachineVCamZoom;
+        }
+
+        public double TargetAspect
+        {
+            get => targetAspectWidth / targetAspectHeight;
+        }
+        //------------------------------------------------------------------------------
+
         /// <summary>
         /// Round a arbitrary position to an integer pixel position. Works in world space.
         /// </summary>
@@ -250,6 +275,14 @@ namespace UnityEngine.Experimental.Rendering.Universal
         [SerializeField] bool m_StretchFill;
 #endif
 
+        //------------------------------------------------------------------------------
+        // Custom
+        [SerializeField] bool m_ForceAspect;
+        [SerializeField] double m_TargetAspectWidth;
+        [SerializeField] double m_TargetAspectHeight;
+        [SerializeField] Vector2Int m_PixelScreenSize;
+        //------------------------------------------------------------------------------
+
         Camera m_Camera;
         PixelPerfectCameraInternal m_Internal;
         bool m_CinemachineCompatibilityMode;
@@ -298,25 +331,39 @@ namespace UnityEngine.Experimental.Rendering.Universal
 
             // Case 1249076: Initialize internals immediately after the scene is loaded,
             // as the Cinemachine extension may need them before OnBeginContextRendering is called.
-            UpdateCameraProperties();
+            Vector2Int rtSize = new Vector2Int();
+            Rect rect = new Rect();
+            CalculateCameraProperties(ref rect, ref rtSize);
+
+            pixelScreenSize = new Vector2Int(m_Camera.pixelWidth, m_Camera.pixelHeight);
         }
 
-        void UpdateCameraProperties()
+        // void UpdateCameraProperties()
+        // {
+            // var rtSize = cameraRTSize;
+            // m_Internal.CalculateCameraProperties(rtSize.x, rtSize.y);
+
+            // if (m_Internal.useOffscreenRT)
+            //     m_Camera.pixelRect = m_Internal.CalculateFinalBlitPixelRect(rtSize.x, rtSize.y);
+            // else
+            //     m_Camera.rect = new Rect(0.0f, 0.0f, 1.0f, 1.0f);
+        // }
+
+        void OnBeginContextRendering(ScriptableRenderContext context, List<Camera> cameras)
         {
-            var rtSize = cameraRTSize;
-            m_Internal.CalculateCameraProperties(rtSize.x, rtSize.y);
-
-            if (m_Internal.useOffscreenRT)
-                m_Camera.pixelRect = m_Internal.CalculateFinalBlitPixelRect(rtSize.x, rtSize.y);
-            else
-                m_Camera.rect = new Rect(0.0f, 0.0f, 1.0f, 1.0f);
+            
         }
-
+        
         void OnBeginCameraRendering(ScriptableRenderContext context, Camera camera)
         {
             if (camera == m_Camera)
             {
-                UpdateCameraProperties();
+                // If forcing Aspect Ratio, use the adjusted RT Size.
+                Vector2Int rtSize = new Vector2Int();
+                Rect rect = new Rect();
+                CalculateCameraProperties(ref rect, ref rtSize);   
+                m_Camera.pixelRect = rect;
+                
                 PixelSnap();
 
                 if (!m_CinemachineCompatibilityMode)
@@ -324,18 +371,25 @@ namespace UnityEngine.Experimental.Rendering.Universal
                     m_Camera.orthographicSize = m_Internal.orthoSize;
                 }
 
-                UnityEngine.U2D.PixelPerfectRendering.pixelSnapSpacing = m_Internal.unitsPerPixel;
+                // Custom: Causes jittering noticeable on Player sprite when in motion.
+                // UnityEngine.U2D.PixelPerfectRendering.pixelSnapSpacing = m_Internal.unitsPerPixel;
             }
         }
 
         void OnEndCameraRendering(ScriptableRenderContext context, Camera camera)
         {
-            if (camera == m_Camera)
-                UnityEngine.U2D.PixelPerfectRendering.pixelSnapSpacing = 0.0f;
+            // Custom: Causes jittering noticeable on Player sprite when in motion.
+            // if (camera == m_Camera)
+            //     UnityEngine.U2D.PixelPerfectRendering.pixelSnapSpacing = 0.0f;
         }
 
         void OnEnable()
         {
+            // Custom: If forcing Aspect Ratio, use the adjusted RT Size.
+            Vector2Int rtSize = new Vector2Int();
+            Rect rect = new Rect();
+            CalculateCameraProperties(ref rect, ref rtSize);
+            
             m_CinemachineCompatibilityMode = false;
 
             RenderPipelineManager.beginCameraRendering += OnBeginCameraRendering;
@@ -349,6 +403,75 @@ namespace UnityEngine.Experimental.Rendering.Universal
 
             m_Camera.rect = new Rect(0.0f, 0.0f, 1.0f, 1.0f);
             m_Camera.ResetWorldToCameraMatrix();
+        }
+
+        void Update()
+        {
+            pixelScreenSize = new Vector2Int(m_Camera.pixelWidth, m_Camera.pixelHeight);
+        }
+
+        private void CalculateCameraProperties(ref Rect rect, ref Vector2Int rtSize)
+        {
+            if (forceAspect)
+            {
+                rect = GetAspectEnforcedRect(rect);
+                rtSize.x = (int)rect.width;
+                rtSize.y = (int)rect.height;
+            }
+            else
+                rtSize = cameraRTSize;
+
+            m_Internal.CalculateCameraProperties(rtSize.x, rtSize.y);
+        }
+
+        /// <summary>
+        /// Get a rect with the implied letterboxing / pillarboxing.
+        /// </summary>
+        private Rect GetAspectEnforcedRect(Rect rect)
+        {
+            double windowAspect = (double)Screen.width / (double)Screen.height;
+
+            // Current viewport height should be scaled by this amount.
+            double scaleHeight = windowAspect / TargetAspect;
+
+            int pixelHeight;
+            int pixelWidth;
+
+            // Letterbox
+            if (scaleHeight < 1.0d)
+            {
+                double rawPixelHeight = scaleHeight * (double)Screen.height;
+                pixelHeight = (int)Math.Round(rawPixelHeight, MidpointRounding.AwayFromZero);
+                pixelWidth = Screen.width;
+
+                rect.x = 0f;
+                rect.y = (float)Math.Round(((int)Screen.height - pixelHeight) / 2f, MidpointRounding.AwayFromZero);
+                rect.width = pixelWidth;
+                rect.height = pixelHeight;
+            }
+            // Pillarbox
+            else if (scaleHeight > 1.0d)
+            {
+                double scaleWidth = 1.0d / scaleHeight;
+                pixelHeight = Screen.height;
+                double rawPixelWidth = scaleWidth * (double)Screen.width;
+                pixelWidth = (int)Math.Round(rawPixelWidth, MidpointRounding.AwayFromZero);
+
+                rect.x = (float)Math.Round(((int)Screen.width - pixelWidth) / 2f, MidpointRounding.AwayFromZero);
+                rect.y = 0f;
+                rect.width = pixelWidth;
+                rect.height = pixelHeight;
+            }
+            // No Cropping Necessary
+            else
+            {
+                rect.x = 0f;
+                rect.y = 0f;
+                rect.width = Screen.width;
+                rect.height = Screen.height;
+            }
+
+            return rect;
         }
 
 #if DEVELOPMENT_BUILD || UNITY_EDITOR
