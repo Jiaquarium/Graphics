@@ -77,7 +77,9 @@ Shader "Hidden/Universal Render Pipeline/Terrain/Lit (Add Pass)"
             #pragma multi_compile _ LIGHTMAP_ON
             #pragma multi_compile_fog
             #pragma multi_compile_instancing
-            #pragma instancing_options norenderinglayer assumeuniformscaling nomatrices nolightprobe nolightmap
+            // Removed norenderinglayer option in 2022.2/staging https://github.com/Unity-Technologies/Graphics/blob/866e82896d52796070d57f893e2ea1c4c56d8b95/Packages/com.unity.render-pipelines.universal/Shaders/Terrain/TerrainLitAdd.shader#L80
+            // #pragma instancing_options norenderinglayer assumeuniformscaling nomatrices nolightprobe nolightmap
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
             #pragma multi_compile_fragment _ DEBUG_DISPLAY
 
             #pragma shader_feature_local_fragment _TERRAIN_BLEND_HEIGHT
@@ -124,7 +126,9 @@ Shader "Hidden/Universal Render Pipeline/Terrain/Lit (Add Pass)"
 
             //#pragma multi_compile_fog
             #pragma multi_compile_instancing
-            #pragma instancing_options norenderinglayer assumeuniformscaling nomatrices nolightprobe nolightmap
+            // Removed norenderinglayer option in 2022.2/staging https://github.com/Unity-Technologies/Graphics/blob/866e82896d52796070d57f893e2ea1c4c56d8b95/Packages/com.unity.render-pipelines.universal/Shaders/Terrain/TerrainLitAdd.shader#L131
+            // #pragma instancing_options norenderinglayer assumeuniformscaling nomatrices nolightprobe nolightmap
+            #pragma instancing_options assumeuniformscaling nomatrices nolightprobe nolightmap
 
             #pragma shader_feature_local _TERRAIN_BLEND_HEIGHT
             #pragma shader_feature_local _NORMALMAP
